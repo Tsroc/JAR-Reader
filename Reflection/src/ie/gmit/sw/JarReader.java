@@ -2,7 +2,11 @@ package ie.gmit.sw;
 
 import java.util.jar.*;
 
-import java.util.Arrays;
+import ie.gmit.sw.classable.Classable;
+import ie.gmit.sw.classable.JavaInterfaceInfo;
+import ie.gmit.sw.iterator.ClassList;
+import ie.gmit.sw.classable.JavaClassInfo;
+
 import java.util.Enumeration;
 import java.io.*;
 import java.lang.reflect.Constructor;
@@ -11,19 +15,63 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 
-
-// JAR reader info: https://stackoverflow.com/questions/11016092/how-to-load-classes-at-runtime-from-a-folder-or-jar
-
-
+/**
+ * Reads a JAR file, adding relevant details to ClassList.
+ * 
+ * @author Eoin Wilkie 
+ *
+ */
 public class JarReader {
+// JAR reader info: https://stackoverflow.com/questions/11016092/how-to-load-classes-at-runtime-from-a-folder-or-jar
 	String fname;
 	JarFile jarFile;
+	ClassList classList; 
 	
-	public JarReader(String fname) throws FileNotFoundException, IOException {
-		this.fname = fname;
-		this.jarFile = new JarFile(fname);
+	/**
+	 *	Private Class constructor. 
+	 *	Sets the ClassList to the singleton instance of ClassList	 *	
+	 *
+	 */
+	private JarReader() {
+		classList = ClassList.getInstance(); 
 	}
 	
+	/**
+	 * Class Constructor
+	 * Allows the user to enter a String.
+	 * 
+	 * @param f The String to read.
+	 * @throws FileNotFoundException
+	 * @throws IOException
+	 */
+	public JarReader(String f) throws FileNotFoundException, IOException {
+		this();
+		this.fname = f;
+		this.jarFile = new JarFile(f);
+	}
+	
+	/**
+	 * Class Constructor
+	 * Allows the user to enter a File.
+	 * 
+	 * @param f The File to read.
+	 * @throws FileNotFoundException
+	 * @throws IOException
+	 */
+	public JarReader(File f) throws FileNotFoundException, IOException {
+		this();
+		this.fname = f.getAbsolutePath();
+		this.jarFile = new JarFile(f);
+	}
+	
+	/**
+	 * Processes the JAR reading,
+	 * extracts class info for each class in the JAR,
+	 * and adds relevant info to the ClassList.
+	 * 
+	 * @throws IOException
+	 * @throws ClassNotFoundException
+	 */
 	public void process() throws IOException, ClassNotFoundException{
 		Enumeration<JarEntry> e = jarFile.entries();
 		URL[] urls = { new URL("jar:file:" + fname + "!/") };
@@ -35,66 +83,67 @@ public class JarReader {
 		        continue;
 		    }
 		    // -6 because of .class
+		    // Clean this up!!!
 		    String className = je.getName().substring(0,je.getName().length()-6);
 		    className = className.replace('/', '.');
 		    
 		    Class<?> cls = cl.loadClass(className);
-		    getClassDetails(cls);
+		    addClass(cls);
+		   
+		    // https://stackoverflow.com/questions/5712839/easy-way-to-count-lines-of-code-using-reflection
 		    
 		}
+		
 	}
 	
-	private void getClassDetails(Class<?> cls) {
-		// Process class
-		// Print class name
-		System.out.println(cls.getName());
-		// Print package
-		Package pack = cls.getPackage(); 
-		System.out.println(pack.toString());
+	/**
+	 * Adds Class information to ClassList.
+	 * 
+	 * @param cls The Class to be added.
+	 */
+	private void addClass(Class<?> cls) {
+		Classable newCls;
 		
-		// Is interface?
-		boolean iface = cls.isInterface();
-		System.out.println("Interface: " + iface);
+		// Checks if the class is an interface or a class,
+		if(cls.isInterface()) {
+			// Creating an InterfaceClass
+			newCls = new JavaInterfaceInfo();
 		
-		// Get the set of interface it implements
-		Class[] interfaces = cls.getInterfaces();
-		System.out.println("Interfaces::" + interfaces.length);
-		for(Class i: interfaces)
-			System.out.println("\t" + i);
-		
-		// Get the set of constructors
-		Constructor[] cons = cls.getConstructors(); 
-		System.out.println("Constructors:" + cons.length);
-		for(Constructor c: cons) {
-			System.out.print("\t" + c);
-			// Print the parameters
-			Class[] param = c.getParameterTypes();
-			System.out.println(", " + Arrays.toString(param));	
-		}
+		} else {
+			// Creating a StandardClass
+			newCls = new JavaClassInfo();
 			
-		//Get the fields / attributes
-		Field[] fields = cls.getFields();
-		System.out.println("Fields: " + fields.length);
-		for(Field f: fields) {
-			System.out.print("\t" + f);
 		}
 		
-		// Get the set of methods
+		// Base Class: name, package, methods
+		newCls.setName(cls.getName());
+		newCls.setPackage(cls.getPackage().toString());
+
 		Method[] methods = cls.getMethods(); 
-		System.out.println("Methods: " + methods.length);
 		for(Method m: methods) {
-			System.out.println("\t" + m);
-			// Print the return type 
-			Class c = m.getReturnType();
-			System.out.println("\t\treturn: " + m);	
-			// Print method params
-			Class[] params = m.getParameterTypes();
-			System.out.println("\t\tparams: " + Arrays.toString(params));	
+			newCls.addMethod(m.toString());
+		}
+		
+		
+		if(newCls instanceof JavaClassInfo) {
+			// Standard class: interface, fields, constructors
+			((JavaClassInfo) newCls).setSuperclass(cls.getSuperclass().toString());
+			
+			Class[] interfaces = cls.getInterfaces();
+			for(Class i: interfaces)
+				((JavaClassInfo) newCls).addInterface(i.toString());
+			
+			// Field
+			Field[] fields = cls.getFields();
+			for(Field f: fields)
+				((JavaClassInfo) newCls).addField(f.toString());
+			
+			// Constructor
+			Constructor[] cons = cls.getConstructors(); 
+			for(Constructor c: cons)
+				((JavaClassInfo) newCls).addConstructor(c.toString());
 			
 		}
-		System.out.println();
-
+		classList.add(newCls);
 	}
-		
-
 }
